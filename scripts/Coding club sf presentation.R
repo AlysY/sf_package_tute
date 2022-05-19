@@ -5,6 +5,7 @@
 
 ## IMPORTANT THINGS TO INCLUDE
 # [X] st_write
+# [] st_as_sf from a dataframe of points with attributes to an spatial object
 # [] st_crs
 # [] st_transform
 # [X] st with %>% mutate()
@@ -246,7 +247,8 @@ EVC_gained2 %>% mutate(area = x %>% st_area() %>% as.vector) # x is the geometry
 
 
 # Urbanisation ---------------------------------------------------------------------------------------------------------------------------------------------------------------
-## michael - can you explain whats going on here?
+## michael - can you explain whats going on here? What are the sites? Can we cut them down to only be like 5-20 sites?
+## could these sites start as a csv, load in as a df, and then use st_as_sf() to convert? given that is probably the most popular function
 
 ## Population data
 # read in the raster
