@@ -27,3 +27,4 @@ st_layers(file.path(uncleanData_dir,"EVC_data.gpkg")) #did they store correctly
 #reading croping and reprojecting digital elevation raster
 r	<- rast(file.path(uncleanData_dir, "dem1sv1_0")) %>% crop(ext(145.3905, 149.1324, -43.55763, -35.25134)) %>% project(vect("EVC_data.gpkg", layer = "EVC_extant")) %>% mask(vect("EVC_data.gpkg", layer = "EVC_extant")) %>% crop(ext(vect("EVC_data.gpkg", layer = "EVC_extant")))
 writeRaster(r, file.path(uncleanData_dir, "vic_EVC_dem.tif"), overwrite=TRUE)
+
