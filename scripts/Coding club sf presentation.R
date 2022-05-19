@@ -1,7 +1,7 @@
 ## Introduction to the sf package
+
 # By Michael Traurig and Alys Young (mostly michael's code)
-
-
+# May 2022
 
 ## IMPORTANT THINGS TO INCLUDE
 # [X] st_write
@@ -11,6 +11,13 @@
 # [X] st with %>% mutate()
 # [X] st_area
 # [] st_join
+
+## TUTE RUNNING SHEET
+# 2:30 - 2:35pm start and introduce Michael
+# 2:35 - 3:00pm Alys tute on sf generally including some basic live coding
+# 3:00 - 3:20pm Michael explain the EVC and elevation ecology example, and walks through this code
+# 3:20 - 3:30pm questions
+
 
 
 # Set up ------------------------------------------------------------------
@@ -22,6 +29,8 @@ library(units)
 library(dplyr)     # data cleaning and manipulating
 library(fasterize) # turn spatial objects (e.g. polygons) into rasters quickly
 library(terra)     # for rasters, newer version of the package raster
+library(tmap)      # plotting rasters
+library(ggplot2)   # plotting spatial objects
 
 ## Functions
 # Custom function to erase one vector layer from another
@@ -41,8 +50,7 @@ data_dir <- "data"
 
 
 # EVC Data --------------------------------------------------------------------
-
-#Create extant and pre1750 maps based on selection of vegetation groups
+# Create extant and pre1750 maps based on selection of vegetation groups
 
 ## Look at the layers within the EVC_data geopackage
 # layers are the different sets of data or maps contained within the one file
@@ -69,11 +77,13 @@ EVC_1750   <- filter(st_read("EVC_data.gpkg", layer = "EVC_1750"), EVC == "1105"
 EVC_extant_raw <- st_read(file.path(data_dir, "EVC_data.gpkg"), layer = "EVC_extant")
 EVC_1750_raw <- st_read(file.path(data_dir, "EVC_data.gpkg"), layer = "EVC_1750")
 
+# Have a look
 class(EVC_extant_raw)
 class(EVC_1750_raw)
 
 EVC_extant_raw
 head(EVC_1750_raw)
+st_crs(EVC_1750_raw)
 
 ## Michael can we add st_crs in here? just to look
 
@@ -82,15 +92,15 @@ head(EVC_1750_raw)
 EVC_extant_raw$EVC <- as.character(EVC_extant_raw$EVC) # the class was numeric so changing it
 
 ## Data exploration
-# Unique EVCs
-EVC_extant_EVCs <- EVC_extant_raw %>%
-  st_drop_geometry %>%
-  select(EVC) %>%
-  pull %>%
-  unique %>%
-  sort
+# Find the unique EVCs
+EVC_extant_EVCs <- EVC_extant_raw %>% # the data
+  st_drop_geometry %>%                # extracts the dataframe (removes the polygon shapes)
+  select(EVC) %>%                     # select one column
+  pull %>%                            # turn from a dataframe of one column to a vector
+  unique %>%                          # find the unique values
+  sort                                # sort the values
 
-# Unique group names
+# Find the unique group names - same method
 EVC_extant_GroupName <- EVC_extant_raw %>%
   st_drop_geometry %>%
   select(EVC) %>%
@@ -113,19 +123,21 @@ EVC_1750 <- EVC_1750_raw %>%
 ## Ways to improve efficiency --------------------------------------------------------------------
 
 # 1. Set the EVCs of interest as its own vector.
+# Alys's rule of thumb is if I use it 3 times, or it will be values that change, then turn it into a vector
 EVCs_of_interest <- c("1105", "42", "1000")
+filter(EVC_1750, EVC %in% EVCs_of_interest)
 
-# 2. Make a function
-filter_to_EVC <- function(data, EVCs_of_interest){
+# 2. Make a function of the same method
+filter_to_EVC <- function(data, EVCs){
   data %>%
-    filter(EVC %in% EVCs_of_interest) %>%
+    filter(EVC %in% EVCs) %>%
     st_union() %>%
     st_as_sf()
-
 }
 
-EVC_extant_2 <- filter_to_EVC(data = EVC_extant_raw, EVCs_of_interest = EVCs_of_interest)
-EVC_1750_2 <- filter_to_EVC(data = EVC_1750_raw, EVCs_of_interest = EVCs_of_interest)
+# Apply the function
+EVC_extant_2 <- filter_to_EVC(data = EVC_extant_raw, EVCs = EVCs_of_interest)
+EVC_1750_2 <- filter_to_EVC(data = EVC_1750_raw, EVCs = EVCs_of_interest)
 
 # Check the function actually returns the correct output
 identical(EVC_extant, EVC_extant_2)
@@ -163,14 +175,15 @@ classication_mat <- matrix(c(-60,  1370, NA,
 classication_mat
 # The first column in the lower bounds, the second is the upper and the 3rd is what it will be reclassified as
 
-## Michael - whats the matrix doing?
-vicElevation_1370m <- DEM_ras %>%
- 	classify(classication_mat) %>% # define earlier using our elevation of interest as above 1370m
- 		 as.polygons() %>% # turn the raster into polygons so we have polyogns of the high elevation areas
- 		 union() %>% # make them one polygon - Michael is this correct?
- 		 st_as_sf() %>%
- 		 st_make_valid() # michael - clarify what this does?
 
+vicElevation_1370m <- DEM_ras %>% # the data
+ 	classify(classication_mat) %>%  # define earlier using our elevation of interest as above 1370m
+ 		 as.polygons() %>%            # turn the raster into polygons so we have polyogns of the high elevation areas
+ 		 union() %>%                  # make them one polygon - Michael is this correct?
+ 		 st_as_sf() %>%               # michael - could you please explain why we need this
+ 		 st_make_valid()              # michael - clarify what this does?
+
+# have a look
 vicElevation_1370m
 
 ## Michael - can we break this step up by adding in looking at the crs of the polygons? Maybe make sure the crs is different to the EVCs, plot them to show its different, then use st_tranform
@@ -182,6 +195,7 @@ vicElevation_1370m
 # this is opposed to the st_intersect function (very confusing) which find which object intersect and then keeps the entire object (doesnt cut it)
 ?st_intersect
 
+## Find the are that is both the vegetation (ethier extant of in 1750) AND above a certain elevation of 1370m
 EVC_extant_1370 <- st_intersection(EVC_extant, vicElevation_1370m)
 EVC_1750_1370   <- st_intersection(EVC_1750, vicElevation_1370m)
 
@@ -231,7 +245,7 @@ st_write(EVC_gained2, "output/EVC_areachange.gpkg", layer = "gained")
 
 
 
-## Using with dplyr again
+## Practice using dplyr
 # calculate the area using st_area()
 
 # 1. as a single value
@@ -246,7 +260,7 @@ EVC_gained2 %>% mutate(area = x %>% st_area() %>% as.vector) # x is the geometry
 
 
 
-# Urbanisation ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Urbanisation - showing how the terra package and sf package interact --------------------------------------------------------------------------------------------------------------------------------------------------------------
 ## michael - can you explain whats going on here? What are the sites? Can we cut them down to only be like 5-20 sites?
 ## could these sites start as a csv, load in as a df, and then use st_as_sf() to convert? given that is probably the most popular function
 
@@ -262,13 +276,14 @@ pop_ras <- terra::rast(file.path(data_dir, "population.tif"))
 sites_points <- st_read(file.path(data_dir,"vic_sites.shp"))
 sites <- sites_points %>% st_buffer(dist = 500, endCapStyle = "ROUND")
 
-sites_points
-sites
+## Lets have a look
+sites_points # points
+sites # polygons
 
 class(sites_points)
 class(sites)
 
-## this doesnt plot well
+## Michael - this doesnt plot well. Any thoughts on how to improve? I think zoom in on one section
 plot(st_geometry(unchanged_EVC), col = "purple")
 plot(st_geometry(EVC_lost2), add = TRUE, col = "red")
 plot(st_geometry(EVC_gained2), add = TRUE, col = "blue")
@@ -279,23 +294,30 @@ plot(st_geometry(sites), add = TRUE, pch = 17, col = "orange", size = 6)
 
 for (i in 1:length(sites$FID)){
   one_site <- terra::vect(sites[i,]) # select one site. Why do you want this to be a spatVector rather than an sf object?
+
   ras <- crop(pop_ras, one_site) %>% # crop the population raster to the site polygon - Michael is this rihgt?
-    mask(one_site) %>% # keep only the values which are inside the one_site polygon
-    classify(cbind(NA, 0)) # turn any NA values into a 0
+    mask(one_site) %>%               # keep only the values which are inside the one_site polygon
+    classify(cbind(NA, 0))           # turn any NA values into a 0
+
   sites$urbanisation[i] <- sum(values(ras)) # count all the values and save this to a new column called urbanisation on the sites dataframe
 }
 
 # have a look at sites and the new column added on the right
 sites
 
-# lets use dplyr with an sf object for interest
+## Practice using dplyr
 # basic mutate function
 sites %>% mutate(urban_round = round(urbanisation, 1)) # round the urbanisation to 1 dp
 
 # stringing functions together
 sites %>% filter(urbanisation > 1000)
 sites %>% mutate(size = ifelse(urbanisation > 1000, "Yes", "No"))
-sites %>% mutate(size = ifelse(urbanisation > 1000, "Yes", "No")) %>% st_drop_geometry %>%  group_by(size) %>%  summarize(n = n(),                                                                                                                       mean = mean(urbanisation))
+sites %>%
+  mutate(size = ifelse(urbanisation > 1000, "Yes", "No")) %>%
+  st_drop_geometry %>%
+  group_by(size) %>%
+  summarize(n = n(),
+            mean = mean(urbanisation))
 
 
 # find the maximum value of urbanisation
@@ -317,11 +339,19 @@ urban_ras_maxsite <- crop(pop_ras, site_maxurban) %>%
   mask(site_maxurban) %>%  # to mask, it needs to be in the correct class. currently its sf and terra::vect() turns it into a SpatVector
   classify(cbind(NA, 0))
 
+
+
+# Plotting ----------------------------------------------------------------
+
+## Base R - does fine, bit slow. remember to use add = TRUE
 plot(urban_ras_maxsite) # the urban raster?
 plot(site_maxurban, add = TRUE) # the 500m buffer area
 plot(sites_points[which.max(sites$urbanisation),], add = TRUE) # the site centre point
 
-library(tmap)
+
+
+
+## Tmap - good for rasters and terra
 tm_map <- tm_shape(urban_ras_maxsite) + tm_raster() # plot the urban raster only
 tm_map
 
@@ -333,8 +363,13 @@ tm_map +
   tm_dots(size = 2)
 
 
-library(ggplot2)
-urban_maxsite_df <- urban_ras_maxsite %>% as.data.frame(xy = TRUE) %>%
+
+
+## ggplot - good for spatial objects (points, lines, polygons, sf objects)
+
+# turn the raster into a dataframe so it can plot
+urban_maxsite_df <- urban_ras_maxsite %>%
+  as.data.frame(xy = TRUE) %>%
   na.omit
 
 ## plot just the raster
@@ -346,24 +381,27 @@ ggplot() +
   geom_sf(data = site_maxurban_sf) # plots in long lat
 
 
-## Michael I think we delete this because its the same process as the maximum one
-# # plot highest population site
-# site_minurban <- vect(sites[which.min(sites$urbanisation),])
-# urban_ras_minsite <- crop(pop_ras, site_minurban) %>%
-#   mask(site_minurban) %>%
-#   classify(cbind(NA, 0))
-#
-# plot(urban_ras_minsite) # the urban raster?
-# plot(site_minurban, add = TRUE) # the 500m buffer area
-# plot(sites_points[which.min(sites$urbanisation),], add = TRUE) # the site centre point
-#
-
 
 ## st_intersect
 # intersect the points with something else like the original EVC
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Appendix - not working --------------------------------------------------
 
 
 # MICHAEL - this plotting changes the crs weird and I couldnt figu --------
