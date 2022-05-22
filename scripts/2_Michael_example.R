@@ -3,18 +3,10 @@
 # By Michael Traurig and Alys Young (mostly michael's code)
 # May 2022
 
-## IMPORTANT THINGS TO INCLUDE
-# [X] st_write
-# [] st_as_sf from a dataframe of points with attributes to an spatial object
-# [] st_crs
-# [] st_transform
-# [X] st with %>% mutate()
-# [X] st_area
-# [] st_join
-
 ## TUTE RUNNING SHEET
 # 2:30 - 2:35pm start and introduce Michael
-# 2:35 - 3:00pm Alys tute on sf generally including some basic live coding
+# 2:35 - 2:55pm Alys tute on sf generally including some basic live coding
+# 2:55 - 3:00pm buffer time
 # 3:00 - 3:20pm Michael explain the EVC and elevation ecology example, and walks through this code
 # 3:20 - 3:30pm questions
 
@@ -36,33 +28,23 @@ library(ggplot2)   # plotting spatial objects
 # Custom function to erase one vector layer from another
 st_erase = function(x, y) st_difference(x, st_union(st_combine(y)))
 
-## the joy of working in an r project is not having to set the working directory
-#set working directory
-# basedir <- "e:/temp"
-# setwd(basedir)
+## Set the working directory
+# dont need to do this because we are using a project
 
-data_dir <- paste0(file.path(getwd(), "data")) ## for a full directory
-data_dir <- "data"
-
-## Other functions that we use a lot here
-?file.path
-# creates a file path. You put in the names of the folders and the function fills in the / inbetween
 
 
 # EVC Data --------------------------------------------------------------------
 # Create extant and pre1750 maps based on selection of vegetation groups
 
 ## Look at the layers within the EVC_data geopackage
-# layers are the different sets of data or maps contained within the one file
-st_layers(file.path(data_dir, "EVC_data.gpkg"))
+# explain layers
+st_layers("data/EVC_data.gpkg")
 
-
-## Create extant and pre1750 maps based on selection of vegetation groups
 
 ## Option 1 - Michael's code
 # MICHAEL to do - what is this first 2 lines of code doing?
-unique(st_read(file.path(data_dir, "EVC_data.gpkg"), layer = "EVC_extant")$EVC)
-unique(st_read(file.path(data_dir, "EVC_data.gpkg"), layer = "EVC_extant")$XGROUPNAME)
+unique(st_read("data/EVC_data.gpkg", layer = "EVC_extant")$EVC)
+unique(st_read("data/EVC_data.gpkg", layer = "EVC_extant")$XGROUPNAME)
 
 EVC_extant <- filter(st_read("EVC_data.gpkg", layer = "EVC_extant"), EVC == "1105" | EVC == "42" | EVC == "1000") %>% st_union() %>% st_as_sf()
 EVC_1750   <- filter(st_read("EVC_data.gpkg", layer = "EVC_1750"), EVC == "1105" | EVC == "42" | EVC == "1000") %>% st_union() %>% st_as_sf()
@@ -79,13 +61,11 @@ EVC_1750_raw <- st_read(file.path(data_dir, "EVC_data.gpkg"), layer = "EVC_1750"
 
 # Have a look
 class(EVC_extant_raw)
-class(EVC_1750_raw)
-
 EVC_extant_raw
 head(EVC_1750_raw)
 st_crs(EVC_1750_raw)
 
-## Michael can we add st_crs in here? just to look
+
 
 ## Data cleaning
 # Change the class
@@ -186,14 +166,6 @@ vicElevation_1370m <- DEM_ras %>% # the data
 # have a look
 vicElevation_1370m
 
-## Michael - can we break this step up by adding in looking at the crs of the polygons? Maybe make sure the crs is different to the EVCs, plot them to show its different, then use st_tranform
-
-
-## Next function to use is st_intersection
-# this find the areas where the two sf object intersect and only keep the intersecting areas
-?st_intersection
-# this is opposed to the st_intersect function (very confusing) which find which object intersect and then keeps the entire object (doesnt cut it)
-?st_intersect
 
 ## Find the are that is both the vegetation (ethier extant of in 1750) AND above a certain elevation of 1370m
 EVC_extant_1370 <- st_intersection(EVC_extant, vicElevation_1370m)
@@ -201,6 +173,11 @@ EVC_1750_1370   <- st_intersection(EVC_1750, vicElevation_1370m)
 
 st_is_valid(EVC_extant_1370)
 st_is_valid(EVC_1750_1370)
+
+
+
+
+
 
 # Areas of change ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # Identify the areas of loss and gain for ecosystem X, Long and short method
@@ -321,14 +298,14 @@ sites %>%
 
 
 # find the maximum value of urbanisation
-## Option 1
+## Option 1 - without dplyr
 # max(sites$urbanisation) # whats the maximum value?
 # which.max(sites$urbanisation) # which site has the maximum value?
 # sites[which.max(sites$urbanisation),] # show this site
 # site_maxurban <- vect(sites[which.max(sites$urbanisation),])
 
 
-## Option 2
+## Option 2 - with dplyr
 site_maxurban_sf <- sites %>%
   filter(urbanisation == max(urbanisation))
 
@@ -351,41 +328,60 @@ plot(sites_points[which.max(sites$urbanisation),], add = TRUE) # the site centre
 
 
 
-## Tmap - good for rasters and terra
-tm_map <- tm_shape(urban_ras_maxsite) + tm_raster() # plot the urban raster only
-tm_map
-
-# add the other spatial objects on top
-tm_map +
-  tm_shape(site_maxurban_sf) + ## add the 500m site buffer to the plot
-  tm_borders() +
-  tm_shape(sites_points[which.max(sites$urbanisation),]) + # the site centre
-  tm_dots(size = 2)
 
 
 
 
-## ggplot - good for spatial objects (points, lines, polygons, sf objects)
-
-# turn the raster into a dataframe so it can plot
-urban_maxsite_df <- urban_ras_maxsite %>%
-  as.data.frame(xy = TRUE) %>%
-  na.omit
-
-## plot just the raster
-ggplot() +
-  geom_raster(data = urban_maxsite_df, aes(x = x, y = y, fill = population))
-
-# Michael - Same issue as the ggplot code down the bottom. wrong coords? the plot turns into long lat
-ggplot() +
-  geom_sf(data = site_maxurban_sf) # plots in long lat
 
 
 
-## st_intersect
-# intersect the points with something else like the original EVC
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+# Appendix - excessive plotting -------------------------------------------
+
+
+#
+# ## Tmap - good for rasters and terra
+# tm_map <- tm_shape(urban_ras_maxsite) + tm_raster() # plot the urban raster only
+# tm_map
+#
+# # add the other spatial objects on top
+# tm_map +
+#   tm_shape(site_maxurban_sf) + ## add the 500m site buffer to the plot
+#   tm_borders() +
+#   tm_shape(sites_points[which.max(sites$urbanisation),]) + # the site centre
+#   tm_dots(size = 2)
+#
+#
+#
+#
+# ## ggplot - good for spatial objects (points, lines, polygons, sf objects)
+#
+# # turn the raster into a dataframe so it can plot
+# urban_maxsite_df <- urban_ras_maxsite %>%
+#   as.data.frame(xy = TRUE) %>%
+#   na.omit
+#
+# ## plot just the raster
+# ggplot() +
+#   geom_raster(data = urban_maxsite_df, aes(x = x, y = y, fill = population))
+#
+# # Michael - Same issue as the ggplot code down the bottom. wrong coords? the plot turns into long lat
+# ggplot() +
+#   geom_sf(data = site_maxurban_sf) # plots in long lat
+#
 
 
 

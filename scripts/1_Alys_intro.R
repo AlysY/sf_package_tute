@@ -1,0 +1,266 @@
+## Introduction to the sf package
+
+# By Michael Traurig and Alys Young (mostly Alys's code)
+# May 2022
+
+## TUTE RUNNING SHEET
+# 2:30 - 2:35pm start and introduce Michael
+# 2:35 - 3:00pm Alys tute on sf generally including some basic live coding
+# 3:00 - 3:20pm Michael explain the EVC and elevation ecology example, and walks through this code
+# 3:20 - 3:30pm questions
+
+## setting the plotting margins - so it zooms in more
+par(mar = c(0,0,0,0))
+
+# Set up ------------------------------------------------------------------
+
+## Packages
+# read in required libraries
+library(sf)        # spatial analysis
+library(dplyr)     # data cleaning and manipulating
+library(tmap)      # plotting rasters
+library(ggplot2)   # plotting spatial objects
+
+
+
+# read in the data --------------------------------------------------------
+## New functions:
+?st_read
+?st_as_sf
+
+
+
+## Melbourne parks - multipolygon
+parks <- st_read("data/basic_intro/parks.gpkg")
+
+head(parks)
+summary(parks)
+
+## My survey sites - dataframe
+my_sites_df <- read.csv("data/basic_intro/survey_sites.csv")
+my_sites    <- st_as_sf(x = my_sites_df, coords = c("long", "lat"), crs = 4326) # EPSG for WGS84, what my gps was set in.
+
+my_sites
+
+
+## for plotting, state boundary
+vic <- st_read("data/basic_intro/vic.gpkg")
+
+
+
+
+
+
+
+
+# projections --------------------------------------------------------------
+## New functions:
+?st_crs
+?st_transform
+?st_geometry
+
+
+## our data
+parks    # Note: Projected CRS: GDA2020 / MGA zone 55
+my_sites # Geodetic CRS:  WGS 84
+
+## Check the crs using st_crs()
+st_crs(parks)
+st_crs(my_sites)
+# note: they are different. need to reproject my_sites from a geographic crs (WGS84) to a projected crs for melbourne (e.g. MGA2020 55)
+
+## two methods:
+# 1. using the EPSG, or the crs
+my_sites_p <- st_transform(my_sites, crs = 7855)
+# 2. extract the crs from another layer that you know is correct
+my_sites_p <- st_transform(my_sites, crs = st_crs(parks))
+
+# plot them
+plot(st_geometry(parks))                                     # to zoom to the right area
+plot(st_geometry(vic),        add = TRUE, col = "lightgrey") # beacuse this is a polygon it plots over the top and covers the parks
+plot(st_geometry(parks),      add = TRUE, col = "yellow")    # so add the parks again
+plot(st_geometry(my_sites),   add = TRUE, col = "blue")      # dont appear - wrong projection
+plot(st_geometry(my_sites_p), add = TRUE, col = "red")
+
+
+# why use st_geometry ?
+# if your data has columns, each will be plotted
+# e.g. sites has 2 attributes (check the dataframe to see them) so the points plot twice
+plot(my_sites)
+
+
+
+
+# Normal data cleaning ----------------------------------------------------------------
+park_of_interest <- parks[parks$NAME == "Albert Park",]
+park_of_interest <- parks %>% filter(NAME == "Albert Park")
+
+# plot
+plot(st_geometry(parks))
+plot(st_geometry(vic),              add = TRUE, col = "lightgrey")
+plot(st_geometry(parks),            add = TRUE, col = "yellow")
+plot(st_geometry(park_of_interest), add = TRUE, col = "green")
+plot(st_geometry(my_sites_p),       add = TRUE, col = "red")
+
+
+
+
+
+
+
+# Joining attributes ------------------------------------------------------
+## New functions:
+?st_join
+
+# for my sites, as the data from the park layer where the sites are
+my_sites_dat <- st_join(my_sites_p, parks)
+my_sites_dat
+
+# Add the data from my sites to the parks layer
+my_parks_dat <- st_join(parks, my_sites_p)
+my_parks_dat # see the NAs for the park polygons where I have no sites intersecting
+
+
+
+# Buffering ---------------------------------------------------------------
+## New functions:
+?st_buffer
+
+# around a polygon:
+park_oi_buf <- st_buffer(park_of_interest, dist = 2000)
+
+# around a point:
+my_sites_buf <- st_buffer(my_sites_dat, dist = 500)
+
+# compare: the point and the buffered points (now polygons)
+my_sites_dat
+my_sites_buf
+
+
+plot(st_geometry(parks))
+plot(st_geometry(vic),              add = TRUE, col = "lightgrey")
+plot(st_geometry(parks),            add = TRUE, col = "yellow")
+plot(st_geometry(park_of_interest), add = TRUE, col = "green")
+plot(st_geometry(my_sites_p),       add = TRUE, col = "red")
+# Add the buffers
+plot(st_geometry(park_oi_buf),      add = TRUE)
+plot(st_geometry(my_sites_buf),     add = TRUE)
+
+
+
+
+
+# Intersecting ------------------------------------------------------------
+## New functions:
+?st_intersects
+?st_intersection
+
+# parks that are within 2km of our park of interest, Albert Park
+# Keep the parks that intersect the 2km buffer
+parks_intersect_list <- st_intersects(park_oi_buf, parks)
+# returns a list
+parks_intersect_list
+# get the polygons to keep - the ones that intersect
+parks_intersect_list[[1]]
+
+parks_intersect <- parks[parks_intersect_list[[1]],]
+
+# parks_non_intersect <- parks[!parks_intersect_list[[1]],]
+
+
+plot(st_geometry(parks))
+plot(st_geometry(vic),              add = TRUE, col = "lightgrey")
+plot(st_geometry(parks),            add = TRUE, col = "yellow")
+plot(st_geometry(park_of_interest), add = TRUE, col = "green")
+plot(st_geometry(park_oi_buf),      add = TRUE)
+plot(st_geometry(parks_intersect),  add = TRUE, col = "darkgreen")
+
+
+
+# Keep parks that are within 500m of our sites
+my_site_parks_intersect <- st_intersection(my_sites_buf, parks)
+# returns an sf object
+my_site_parks_intersect
+
+plot(st_geometry(parks))
+plot(st_geometry(vic),                     add = TRUE, col = "lightgrey")
+plot(st_geometry(parks),                   add = TRUE, col = "yellow")
+plot(st_geometry(my_sites_p),              add = TRUE, col = "red")
+plot(st_geometry(my_sites_buf),            add = TRUE)
+plot(st_geometry(my_site_parks_intersect), add = TRUE, col = "darkred")
+
+
+
+
+# dplyr and other functions -------------------------------------------------------------------
+
+# Intersecting parks
+parks_intersect
+# how many parks are within 2km of our park?
+nrow(parks_intersect)
+
+# Area
+## Functions:
+?st_area
+st_area(my_site_parks_intersect)
+
+my_parks_full <- my_site_parks_intersect %>% mutate(area = st_area(.))
+
+# Make it a dataframe
+my_parks_df <- my_site_parks_intersect %>%
+  mutate(area = as.vector(st_area(.))) %>%
+  filter(area > 300000) %>%
+  select(site_name, area) %>%
+  st_drop_geometry()
+
+
+# Summarise and group_by
+parks %>%
+  group_by(NAME) %>%
+  summarise(n = n())
+
+
+# plot --------------------------------------------------------------------
+## New functions:
+?geom_sf
+?tm_shape
+?tm_polygons
+?tm_borders
+?tm_dots
+
+## base r
+plot(my_parks_full)
+plot(st_geometry(my_parks_full))
+
+
+
+## ggplot
+# good for sf objects
+ggplot() +
+  geom_sf(data = parks) +
+  geom_sf(data = my_parks_full, fill = "darkred") +
+  geom_sf(data = my_sites_dat, col = "red")
+
+
+
+## tmap
+# good for rasters and sf objects
+tm_shape(my_parks_full) +
+  tm_polygons()
+
+tm_shape(parks)           + tm_polygons() +
+  tm_shape(vic)           + tm_borders(col = "black") +   # Vic as an outline
+  tm_shape(my_parks_full) + tm_polygons(col = "darkred") + # parks that overlap
+  tm_shape(my_sites_dat)  + tm_dots(size = 0.1, col = "red") # sites
+
+
+
+
+# Final - other useful functions ------------------------------------------
+
+# Validity
+?st_is_valid
+?st_make_valid
+
+# empty geometry
+?st_is_empty
