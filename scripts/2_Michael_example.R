@@ -56,24 +56,14 @@ EVC_1750   <- filter(st_read("EVC_data.gpkg", layer = "EVC_1750"), EVC == "1105"
 
 ## Option 2 - Alys's code
 ## Read in the 2 data sets which are different layers within the same file
-EVC_extant_raw <- st_read(file.path(data_dir, "EVC_data.gpkg"), layer = "EVC_extant")
-EVC_1750_raw <- st_read(file.path(data_dir, "EVC_data.gpkg"), layer = "EVC_1750")
-
-# Have a look
-class(EVC_extant_raw)
-EVC_extant_raw
-head(EVC_1750_raw)
-st_crs(EVC_1750_raw)
-
-
 
 ## Data cleaning
-# Change the class
-EVC_extant_raw$EVC <- as.character(EVC_extant_raw$EVC) # the class was numeric so changing it
+# Change the class - do we need this?
+# EVC_extant_raw$EVC <- as.character(EVC_extant_raw$EVC) # the class was numeric so changing it
 
 ## Data exploration
 # Find the unique EVCs
-EVC_extant_EVCs <- EVC_extant_raw %>% # the data
+st_read("data/EVC_data.gpkg", layer = "EVC_extant") %>% # the data
   st_drop_geometry %>%                # extracts the dataframe (removes the polygon shapes)
   select(EVC) %>%                     # select one column
   pull %>%                            # turn from a dataframe of one column to a vector
@@ -81,7 +71,7 @@ EVC_extant_EVCs <- EVC_extant_raw %>% # the data
   sort                                # sort the values
 
 # Find the unique group names - same method
-EVC_extant_GroupName <- EVC_extant_raw %>%
+st_read("data/EVC_data.gpkg", layer = "EVC_1750") %>%
   st_drop_geometry %>%
   select(EVC) %>%
   pull %>%
@@ -89,15 +79,16 @@ EVC_extant_GroupName <- EVC_extant_raw %>%
   sort
 
 ## filter the data to the EVCs of interest
-EVC_extant <- EVC_extant_raw %>%
+EVC_extant <- st_read("data/EVC_data.gpkg", layer = "EVC_extant") %>%
   filter(EVC %in% c("1105", "42", "1000")) %>% # filter for the EVCs of interest
   st_union() %>% # disolves the features into 1 feature with a multipolygon
   st_as_sf() # Michael - what is this doing? and why do we need it?
 
-EVC_1750 <- EVC_1750_raw %>%
+EVC_1750 <- st_read("data/EVC_data.gpkg", layer = "EVC_1750") %>%
   filter(EVC %in% c("1105", "42", "1000")) %>% # filter for the EVCs of interest
   st_union() %>% # Michael - what is this doing? and why do we need it?
   st_as_sf() # Michael - what is this doing? and why do we need it?
+
 
 
 ## Ways to improve efficiency --------------------------------------------------------------------
@@ -108,20 +99,6 @@ EVCs_of_interest <- c("1105", "42", "1000")
 filter(EVC_1750, EVC %in% EVCs_of_interest)
 
 # 2. Make a function of the same method
-filter_to_EVC <- function(data, EVCs){
-  data %>%
-    filter(EVC %in% EVCs) %>%
-    st_union() %>%
-    st_as_sf()
-}
-
-# Apply the function
-EVC_extant_2 <- filter_to_EVC(data = EVC_extant_raw, EVCs = EVCs_of_interest)
-EVC_1750_2 <- filter_to_EVC(data = EVC_1750_raw, EVCs = EVCs_of_interest)
-
-# Check the function actually returns the correct output
-identical(EVC_extant, EVC_extant_2)
-identical(EVC_1750, EVC_1750_2)
 
 
 
@@ -283,12 +260,6 @@ for (i in 1:length(sites$FID)){
 sites
 
 ## Practice using dplyr
-# basic mutate function
-sites %>% mutate(urban_round = round(urbanisation, 1)) # round the urbanisation to 1 dp
-
-# stringing functions together
-sites %>% filter(urbanisation > 1000)
-sites %>% mutate(size = ifelse(urbanisation > 1000, "Yes", "No"))
 sites %>%
   mutate(size = ifelse(urbanisation > 1000, "Yes", "No")) %>%
   st_drop_geometry %>%
@@ -339,118 +310,4 @@ plot(sites_points[which.max(sites$urbanisation),], add = TRUE) # the site centre
 
 
 
-
-
-
-
-
-
-
-
-
-
-# Appendix - excessive plotting -------------------------------------------
-
-
-#
-# ## Tmap - good for rasters and terra
-# tm_map <- tm_shape(urban_ras_maxsite) + tm_raster() # plot the urban raster only
-# tm_map
-#
-# # add the other spatial objects on top
-# tm_map +
-#   tm_shape(site_maxurban_sf) + ## add the 500m site buffer to the plot
-#   tm_borders() +
-#   tm_shape(sites_points[which.max(sites$urbanisation),]) + # the site centre
-#   tm_dots(size = 2)
-#
-#
-#
-#
-# ## ggplot - good for spatial objects (points, lines, polygons, sf objects)
-#
-# # turn the raster into a dataframe so it can plot
-# urban_maxsite_df <- urban_ras_maxsite %>%
-#   as.data.frame(xy = TRUE) %>%
-#   na.omit
-#
-# ## plot just the raster
-# ggplot() +
-#   geom_raster(data = urban_maxsite_df, aes(x = x, y = y, fill = population))
-#
-# # Michael - Same issue as the ggplot code down the bottom. wrong coords? the plot turns into long lat
-# ggplot() +
-#   geom_sf(data = site_maxurban_sf) # plots in long lat
-#
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Appendix - not working --------------------------------------------------
-
-
-# MICHAEL - this plotting changes the crs weird and I couldnt figu --------
-
-library(ggplot2)
-
-# to plot a SpatRaster in ggplot it has to be a dataframe
-urban_maxsite_df <- urban_ras_maxsite %>% as.data.frame(xy = TRUE) %>% na.omit
-
-## plot just the raster - this works well!
-ggplot() +
-  geom_raster(data = urban_maxsite_df, aes(x = x, y = y, fill = population))
-
-# plot the raster together with the point - bad bad not good. points change to long lat?
-ggplot() +
-  geom_raster(data = urban_maxsite_df, aes(x = x, y = y, fill = population)) +
-  geom_sf(data = sites_points2)
-
-# points only - still long lat!
-ggplot() +
-  geom_sf(data = sites_points, aes(geometry = geometry)) # plots in long lat
-
-
-## ok lets check the crs
-st_crs(sites_points) # GDA94 / MGA zone 55
-st_crs(urban_ras_maxsite) # GDA_1994_MGA_Zone_55
-# both GDA94
-
-# but not the same
-identical(st_crs(sites_points), st_crs(urban_ras_maxsite))
-
-# projecct the points to be the same as the urbanisation rasters
-sites_points2 <- st_transform(sites_points, crs = st_crs(urban_ras_maxsite))
-
-# and they are the same
-identical(st_crs(sites_points2), st_crs(urban_ras_maxsite))
-
-
-# Plot again with the points "transformed" - still bad!!
-ggplot() +
-  geom_sf(data = sites_points2) # plots in long lat
-
-## ok lets change the points to a dataframe by pulling out the long and lat from the geomtery
-sites_points2$long <- st_coordinates(sites_points2)[,"X"] %>% as.vector
-sites_points2$lat <- st_coordinates(sites_points2)[,"Y"]%>% as.vector
-sites_points_df <- sites_points2 %>%  st_drop_geometry() # its a simple dataframe now
-
-# plot with geom_point instead because its not spatial - looks better
-ggplot() +
-  geom_point(data = sites_points_df, aes(x = long, y = lat))
-
-# Still bad?????
-ggplot() +
-  geom_raster(data = urban_maxsite_df, aes(x = x, y = y, fill = population)) +
-  geom_point(data = sites_points_df, aes(x = long, y = lat))
 
