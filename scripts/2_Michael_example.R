@@ -105,6 +105,7 @@ filter(EVC_1750, EVC %in% EVCs_of_interest)
 DEM_ras <- rast(file.path("data/vic_EVC_dem.tif"))
 
 DEM_ras
+
 #values from -57.34118 to 1983.774, that is the range of elevation within this DEM
 
 ## define how we want the raster reclassified
@@ -125,7 +126,8 @@ vicElevation_1370m <- DEM_ras %>% # the data
  		 union() %>%                  # Dissolve any overlapping polygons and attributes and return a single multipolygon
  		 st_as_sf() %>%               # michael - could you please explain why we need this
  		 st_make_valid() %>%          # michael - clarify what this does?
-     select()
+     select()                     # Removes any attribute data
+
 # have a look
 vicElevation_1370m
 
@@ -135,6 +137,7 @@ plot(vicElevation_1370m, add = TRUE)
 ## Find the are that is both the vegetation (ethier extant of in 1750) AND above a certain elevation of 1370m
 EVC_extant_1370 <- st_intersection(EVC_extant, vicElevation_1370m)
 EVC_1750_1370   <- st_intersection(EVC_1750, vicElevation_1370m)
+
 #wow that was fast? Aren't intersections notoriously slow?
 #This is why st_union can be an important step in the process if you don't need to retain data
 
@@ -169,8 +172,6 @@ geom_sf(data=st_crop(EVC_gained, ext(500000, 533104.694534574, 5807326.3940318, 
 EVC_lost2 		   <- st_difference(EVC_1750_1370, EVC_extant_1370)
 EVC_gained2 	   <- st_difference(EVC_extant_1370, EVC_1750_1370)
 
-
-## Michael - can we add st_write in here?
 # example 1 - write 2 new files
 st_write(EVC_lost2, "output/EVC_arealost.gpkg")
 st_write(EVC_gained2, "output/EVC_areagained.gpkg")
@@ -200,13 +201,12 @@ EVC_gained2 %>% mutate(area = x %>% st_area() %>% as.vector) # x is the geometry
 # read in the raster
 pop_ras <- rast(file.path("data/population.tif"))
 
-## Michael - what are these sites?
-# explanation here
+
+# These sites represent locations students went to do surveys for an undergraduate class. They are a good representation for both urban and remote locations
 
 # st_buffer add a buffer around points
 # the units is based on what units your projection is in - often meters
 sites_points <- read.csv(file.path("data/sites.csv")) %>% st_as_sf(coords = c("X","Y"), crs= crs(pop_ras)) %>% rename(FID = "X.1")
-sites_points <- st_read(file.path("data/vic_sites.shp"))
 sites <- sites_points %>% st_buffer(dist = 500, endCapStyle = "ROUND")
 
 ## Lets have a look
@@ -242,6 +242,11 @@ sites %>%
 
 
 # find the maximum value of urbanisation with dplyr
+## Option 1 - without dplyr
+# max(sites$urbanisation) # whats the maximum value?
+# which.max(sites$urbanisation) # which site has the maximum value?
+# sites[which.max(sites$urbanisation),] # show this site
+# site_maxurban <- vect(sites[which.max(sites$urbanisation),])
 
 site_maxurban_sf <- sites %>%
   filter(urbanisation == max(urbanisation))
@@ -252,8 +257,6 @@ site_maxurban <- sites %>%
 urban_ras_maxsite <- crop(pop_ras, site_maxurban) %>%
   mask(site_maxurban) %>%  # to mask, it needs to be in the correct class. currently its sf and terra::vect() turns it into a SpatVector
   classify(cbind(NA, 0))
-
-
 
 # Plotting ----------------------------------------------------------------
 
