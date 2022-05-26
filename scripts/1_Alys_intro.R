@@ -26,6 +26,7 @@ library(ggplot2)   # plotting spatial objects
 # read in the data --------------------------------------------------------
 ## New functions:
 ?st_read
+?st_write
 ?st_as_sf
 
 
@@ -143,7 +144,7 @@ plot(st_geometry(parks))
 plot(st_geometry(vic),              add = TRUE, col = "lightgrey")
 plot(st_geometry(parks),            add = TRUE, col = "yellow")
 plot(st_geometry(park_of_interest), add = TRUE, col = "green")
-plot(st_geometry(my_sites_p),       add = TRUE, col = "red")
+plot(st_geometry(my_sites_p),       add = TRUE, pch = 17, col = "red")
 # Add the buffers
 plot(st_geometry(park_oi_buf),      add = TRUE)
 plot(st_geometry(my_sites_buf),     add = TRUE)
@@ -187,7 +188,7 @@ my_site_parks_intersect
 plot(st_geometry(parks))
 plot(st_geometry(vic),                     add = TRUE, col = "lightgrey")
 plot(st_geometry(parks),                   add = TRUE, col = "yellow")
-plot(st_geometry(my_sites_p),              add = TRUE, col = "red")
+plot(st_geometry(my_sites_p),              add = TRUE, pch = 17, col = "red")
 plot(st_geometry(my_sites_buf),            add = TRUE)
 plot(st_geometry(my_site_parks_intersect), add = TRUE, col = "darkred")
 
