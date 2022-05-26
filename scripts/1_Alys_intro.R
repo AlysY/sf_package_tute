@@ -42,6 +42,8 @@ my_sites    <- st_as_sf(x = my_sites_df, coords = c("long", "lat"), crs = 4326) 
 
 my_sites
 
+## Save the points
+st_write(my_sites, "data/survey_sites_points.gpkg")
 
 ## for plotting, state boundary
 vic <- st_read("data/basic_intro/vic.gpkg")
