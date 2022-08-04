@@ -3,23 +3,19 @@
 # By Michael Traurig and Alys Young (mostly Alys's code)
 # May 2022
 
-## TUTE RUNNING SHEET
-# 2:30 - 2:35pm start and introduce Michael
-# 2:35 - 3:00pm Alys tute on sf generally including some basic live coding
-# 3:00 - 3:20pm Michael explain the EVC and elevation ecology example, and walks through this code
-# 3:20 - 3:30pm questions
 
 ## setting the plotting margins - so it zooms in more
 par(mar = c(0,0,0,0))
 
 # Set up ------------------------------------------------------------------
 
-## Packages
-# read in required libraries
+## Read in packages - remember to install them first if you havent used them before
 library(sf)        # spatial analysis
 library(dplyr)     # data cleaning and manipulating
-library(tmap)      # plotting rasters
-library(ggplot2)   # plotting spatial objects
+library(tmap)      # plotting - static
+library(ggplot2)   # plotting spatial objects - static but many extensions
+library(leaflet)   # plotting spatial objects - interactive
+library(mapview)   # plotting spatial objects - interactive
 
 
 
@@ -48,9 +44,6 @@ st_write(my_sites, "data/survey_sites_points.gpkg")
 
 ## for plotting, state boundary
 vic <- st_read("data/basic_intro/vic.gpkg")
-
-
-
 
 
 
@@ -255,6 +248,12 @@ tm_shape(parks)           + tm_polygons() +
   tm_shape(vic)           + tm_borders(col = "black") +   # Vic as an outline
   tm_shape(my_parks_full) + tm_polygons(col = "darkred") + # parks that overlap
   tm_shape(my_sites_dat)  + tm_dots(size = 0.1, col = "red") # sites
+
+
+## leaflet
+
+## mapview
+
 
 
 
