@@ -104,7 +104,7 @@ plot(st_geometry(parks))
 plot(st_geometry(vic),              add = TRUE, col = "lightgrey")
 plot(st_geometry(parks),            add = TRUE, col = "yellow")
 plot(st_geometry(park_of_interest), add = TRUE, col = "green")
-plot(st_geometry(my_sites_p),       add = TRUE, col = "red")
+plot(st_geometry(my_sites_p),       add = TRUE, col = "red", pch = 17)
 
 
 
