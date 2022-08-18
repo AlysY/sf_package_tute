@@ -1,5 +1,5 @@
 ## Introduction to the sf package
-
+C:\Users\syntr\R
 # By Michael Traurig and Alys Young (mostly michael's code)
 # May 2022
 
@@ -17,135 +17,121 @@
 ## Packages
 # read in required libraries
 library(sf)        # spatial analysis
+library(tidyverse)
 library(units)
-library(dplyr)     # data cleaning and manipulating
 library(fasterize) # turn spatial objects (e.g. polygons) into rasters quickly
 library(terra)     # for rasters, newer version of the package raster
 library(tmap)      # plotting rasters
-library(ggplot2)   # plotting spatial objects
 
 ## Functions
-# Custom function to erase one vector layer from another
+
+#erases areas that overlap between x and y from x. This function simplifies y in order to reduce computational time of operation (which st_difference alone does not)
 st_erase = function(x, y) st_difference(x, st_union(st_combine(y)))
 
+#Creates a polygon from a DEM that covers stipulated elevation and above. Where f is the source DEM file name, x is a value below the minimum elevation of the dem, y is the elevation cut off, z is a value above top of DEM range, and t is layer name for polygon
+st_demtopoly = function(f,y,t) { rast(f) %>%
+                                     classify(matrix(c(minmax(.)[1], y, NA, y, minmax(.)[2], 1), ncol=3, byrow=TRUE)) %>%
+                                     as.polygons() %>%
+                                     st_as_sf() %>%
+                                     st_transform(st_crs(28355)) %>%
+                                     st_make_valid() %>%
+                                     dplyr::select() %>%
+                                     st_write("sf_tutorial_dem.gpkg", layer = t)
+}
+
+#Extracts a subset of data from your source geopackage and, then transforms attribute data to match how map layers will store data.
+st_src_extract = function(x, y, z) { filter(st_read("sf_tutorial_data.gpkg", layer = x), get(y) %in% z) %>%
+                                     dplyr::select(y) %>%
+                                     mutate(source = x) %>%
+                                     rename(veg_id = y)
+}
+
+#Selects a single attribute from source dataset then intersects with an elevation polygon
+st_src_intersect = function(x, y, z) { st_read("st_tutorial_data.gpkg", layer = x) %>%
+                                       dplyr::select(y) %>%
+                                       mutate(source = x) %>%
+                                       rename(veg_id = y) %>%
+                                       st_intersection(st_read("sf_tutorial_dem", layer = z))
+}
+
+#Stores completed outputs into a geopackage
+st_store = function(x,y) {st_make_valid(x) %>%
+                          st_cast("MULTIPOLYGON") %>%
+                          st_write("sf_tutorial_outputs.gpkg", layer = y)
+}
+
 ## Set the working directory
-# dont need to do this because we are using a project
+setwd("c:/sf_demo/")
 
-# EVC Data --------------------------------------------------------------------
-# Create extant and pre1750 maps based on selection of vegetation groups
+#Creating state level digital elevation model files, full DEM is available at ga.gov.au (https://ecat.ga.gov.au/geonetwork/srv/eng/catalog.search#/metadata/72759)
+st_layers("border_data.gpkg")
 
-## Look at the layers within the EVC_data geopackage
-# explain layers
-st_layers("data/EVC_data.gpkg")
+# Create state level DEM for victoria
+rast("dem1sv1_0") %>% crop(ext(145.3905, 149.1324, -43.55763, -35.25134)) %>%
+                      project(crs(vect("border_data.gpkg", layer = "vic_border"))) %>%
+                      crop(vect("border_data.gpkg", layer = "vic_border")) %>%
+                      mask(vect("border_data.gpkg", layer = "vic_border")) %>%
+                      writeRaster("vic_dem.tif")
 
-
-## Option 1 - Michael's code
-# MICHAEL to do - what is this first 2 lines of code doing?
-unique(st_read("data/EVC_data.gpkg", layer = "EVC_extant")$EVC) %>% sort()
-unique(st_read("data/EVC_data.gpkg", layer = "EVC_extant")$XGROUPNAME) %>% sort()
-
-EVC_extant <- filter(st_read("data/EVC_data.gpkg", layer = "EVC_extant"),
- EVC == "1105" | EVC == "42" | EVC == "1000") %>% st_union() %>% st_as_sf()
-
-EVC_1750   <- filter(st_read("data/EVC_data.gpkg", layer = "EVC_1750"),
- EVC == "1105" | EVC == "42" | EVC == "1000") %>% st_union() %>% st_as_sf()
-
-#A note that these methods whilst simple are a bit less friendly to a non coder as part of a methods appendix in a paper
-
-
-## Option 2 - Alys's code
-## Read in the 2 data sets which are different layers within the same file
-
-## Data exploration
-# Find the unique EVCs
-st_read("data/EVC_data.gpkg", layer = "EVC_extant") %>% # the data
-  st_drop_geometry %>%                # extracts the dataframe (removes the polygon shapes)
-  select(EVC) %>%                     # select one column
-  pull %>%                            # turn from a dataframe of one column to a vector
-  unique %>%                          # find the unique values
-  sort                                # sort the values
-
-# Find the unique group names - same method
-st_read("data/EVC_data.gpkg", layer = "EVC_1750") %>%
-  st_drop_geometry %>%
-  select(EVC) %>%
-  pull %>%
-  unique %>%
-  sort
-
-## filter the data to the EVCs of interest
-EVC_extant <- st_read("data/EVC_data.gpkg", layer = "EVC_extant") %>%
-  filter(EVC %in% c("1105", "42", "1000")) %>% # filter for the EVCs of interest
-  st_union() %>% # disolves the features into 1 feature with a multipolygon
-  st_as_sf() # Michael - what is this doing? and why do we need it?
-
-EVC_1750 <- st_read("data/EVC_data.gpkg", layer = "EVC_1750") %>%
-  filter(EVC %in% c("1105", "42", "1000")) %>% # filter for the EVCs of interest
-  st_union() %>% # Michael - what is this doing? and why do we need it?
-  st_as_sf() # Michael - what is this doing? and why do we need it?
+# Create state level DEM for NSW + ACT
+rast("dem1sv1_0") %>% crop(ext(145.3905, 149.1324, -43.55763, -35.25134)) %>%
+                      project(crs(vect("border_data.gpkg", layer = "nsw_act_border"))) %>%
+                      crop(vect("border_data.gpkg", layer = "nsw_act_border")) %>%
+                      mask(vect("border_data.gpkg", layer = "nsw_act_border")) %>%
+                      writeRaster("nsw_dem.tif")
 
 
 
-## Ways to improve efficiency --------------------------------------------------------------------
+####Look at data, and select our vegetation groups
+st_layers("sf_tutorial_data.gpkg")
+#Victoria
+view(head(st_read("sf_tutorial_data.gpkg", layer = "EVC_extant")))
+names(st_read("sf_tutorial_data.gpkg", layer = "EVC_extant"))
+unique(st_read("sf_tutorial_data.gpkg", layer = "EVC_extant")$EVC)
+unique(st_read("sf_tutorial_data.gpkg", layer = "EVC_extant")$X_EVCNAME)
+vic_vegclass <- c("Sub-alpine Woodland", "Sub-alpine Wet Heathland/Sub-alpine Grassland Mosaic" , "Grassy Woodland", "Sub-alpine Dry Shrubland")
 
-# 1. Set the EVCs of interest as its own vector.
-# Alys's rule of thumb is if I use it 3 times, or it will be values that change, then turn it into a vector
-EVCs_of_interest <- c("1105", "42", "1000")
-filter(EVC_1750, EVC %in% EVCs_of_interest)
+#NSW
+view(head(st_read("sf_tutorial_data.gpkg", layer = "NSW3858")))
+names(st_read("sf_tutorial_data.gpkg", layer = "NSW3858"))
+unique(st_read("sf_tutorial_data.gpkg", layer = "NSW3858")$VEG_GROUP)
+NSW_vegclass <- c("Alpine Rocky Low Open Heathland", "Sub-alpine Shrub-Grass Woodland", "Sub-alpine Dry Shrub-Herb Woodland", "ACT Montane Dry Shrub-Grass Forest")
 
-# 2. Make a function of the same method
+####Create elevation polygons for each state
+st_demtopoly
 
-# Cut the data to a certain area ---------------------------------------------------------------
-# Here the area is defined as above a specific elevation
+#Victoria
+rast("vic_dem.tif")
+st_demtopoly("vic_dem.tif", 1200, "vic_1200") #create a DEM polygon for victoria at 1200m and above
+#Lets take a look at what we just created!
+plot(rast("vic_dem.tif"))
+plot(st_read("sf_tutorial_dem.gpkg", layer = "vic_1200"), add = TRUE)
 
-# Aim: Creating an elevation polygon layer and removing lower elevation from EVC layers
-# quickly introduce terra here
+#NSW/ACT
+rast("nsw_dem.tif")
+st_demtopoly("nsw_dem.tif", 1300, "nsw_1300") #create a DEM polygon for NSW at 1100m and above
+plot(rast("nsw_dem.tif"))
+plot(st_read("sf_tutorial_dem.gpkg", layer = "nsw_1300"), add = TRUE)
 
-## Read in the DEM raster
-DEM_ras <- rast(file.path("data/vic_EVC_dem.tif"))
 
-DEM_ras
+####Create present day distribution
+st_src_extract
+st_src_extract("EVC_extant", "X_EVCNAME", vic_vegclass) %>% st_intersection(st_read("sf_tutorial_dem.gpkg", layer = "vic_1200")) %>% #extract victorian vegetation groups, and cut to 1200m elevation and above
+        rbind(st_src_extract("NSW3858", "VEG_GROUP", NSW_vegclass) %>% st_intersection(st_read("sf_tutorial_dem.gpkg", layer = "nsw_1300"))) %>% #extract NSW/ACT vegetation groups, and cut to 1300m elevation and above
+        st_store("toy_eco_extant") #Store extant ecosystem into geopackage
 
-#values from -57.34118 to 1983.774, that is the range of elevation within this DEM
 
-## define how we want the raster reclassified
-# Our area of interest is above the 1370m elevation
-# Anything from -60 to 1370 elevation will we will reclassify to a NA
-# Anything above the 1370m elevation will we will reclassify as a 1
-classication_mat <- matrix(c(-60,  1370, NA,
-                             1370, 2000, 1),
-                           ncol  = 3,
-                           byrow = TRUE)
-# Have a look
-classication_mat
-# The first column in the lower bounds, the second is the upper and the 3rd is what it will be reclassified as
+plot(st_geometry(st_read("sf_tutorial_outputs.gpkg", layer = "toy_eco_extant")))
+plot(st_read("sf_tutorial_dem.gpkg", layer = "vic_1200"), col  = "green", add = TRUE)
+plot(st_read("sf_tutorial_dem.gpkg", layer = "nsw_1300"), add = TRUE, col  = "purple")
+plot(st_geometry(st_read("sf_tutorial_outputs.gpkg", layer = "toy_eco_extant")), add = TRUE, col = "yellow")
 
-vicElevation_1370m <- DEM_ras %>% # the data
- 	classify(classication_mat) %>%  # define earlier using our elevation of interest as above 1370m
- 		 as.polygons() %>%            # turn the raster into polygons so we have polyogns of the high elevation areas
- 		 union() %>%                  # Dissolve any overlapping polygons and attributes and return a single multipolygon
- 		 st_as_sf() %>%               # michael - could you please explain why we need this
- 		 st_make_valid() %>%          # michael - clarify what this does?
-     select()                     # Removes any attribute data
+####Create pre1750 distribution
+#Copy extant code and change to pre1750!
 
-# have a look
-vicElevation_1370m
 
-plot(DEM_ras)
-plot(vicElevation_1370m, add = TRUE)
 
-## Find the are that is both the vegetation (ethier extant of in 1750) AND above a certain elevation of 1370m
-EVC_extant_1370 <- st_intersection(EVC_extant, vicElevation_1370m)
-EVC_1750_1370   <- st_intersection(EVC_1750, vicElevation_1370m)
-
-#wow that was fast? Aren't intersections notoriously slow?
-#This is why st_union can be an important step in the process if you don't need to retain data
-
-EVC_extant_1370
-vicElevation_1370m
-
-st_is_valid(EVC_extant_1370)
-st_is_valid(EVC_1750_1370)
+view(st_read("sf_tutorial_outputs.gpkg", layer = "toy_eco_pre1750"))
 
 # Areas of change ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # Identify the areas of loss and gain for ecosystem X, Long and short method
@@ -153,72 +139,88 @@ st_is_valid(EVC_1750_1370)
 
 ## Method one ------------------------------------------------------------------------------------------------------------------------------------------------
 # find area of similarity and remove from extant and pre1750 data
-# st_erase is the function defined by us earlier
+# st_erase is a custom function we defined earlier, not automatically part of SF package
 
-unchanged_EVC   <- st_intersection(EVC_extant_1370, EVC_1750_1370) # find the area that is unchanged - the ecosystem is there in both 1750 and now
-EVC_lost 	  	  <- st_erase(EVC_1750_1370, unchanged_EVC) # remove the unchanged area from the 1750 map - gives us what was lost
-EVC_gained 		  <- st_erase(EVC_extant_1370, unchanged_EVC) # remove the unchanged area from the current map - gives us what was gained
+ # find the area that is unchanged - the ecosystem is there in both 1750 and now
+unchanged   <- st_intersection(st_union(st_read("sf_tutorial_outputs.gpkg", layer = "toy_eco_extant")), 
+                                st_union(st_read("sf_tutorial_outputs.gpkg", layer = "toy_eco_pre1750"))) %>% st_as_sf()
 
-st_is_valid(unchanged_EVC)
-
-ggplot() + 
-geom_sf(data=st_crop(EVC_lost, ext(500000, 533104.694534574, 5807326.3940318, 5940129.63613299)), col = "red") +
-geom_sf(data=st_crop(EVC_gained, ext(500000, 533104.694534574, 5807326.3940318, 5940129.63613299)), col = "goldenrod")
-#problems with mapping on large scales with polygons that are close to each other.. is this representative?
+#This will take some time to calculate
+lost 	  	  <- st_erase(st_read("sf_tutorial_outputs.gpkg", layer = "toy_eco_pre1750"), unchanged) # remove the unchanged area from the 1750 map - gives us what was lost
+gained 		  <- st_erase(st_read("sf_tutorial_outputs.gpkg", layer = "toy_eco_extant"), unchanged) # remove the unchanged area from the current map - gives us what was gained
 
 ## Method two ------------------------------------------------------------------------------------------------------------------------------------------------
 # st_difference cuts out a step
 
-EVC_lost2 		   <- st_difference(EVC_1750_1370, EVC_extant_1370)
-EVC_gained2 	   <- st_difference(EVC_extant_1370, EVC_1750_1370)
+lost2        <- st_difference(st_read("sf_tutorial_outputs.gpkg", layer = "toy_eco_pre1750"), 
+                              st_union(st_read("sf_tutorial_outputs.gpkg", layer = "toy_eco_extant")))
 
-# example 1 - write 2 new files
-st_write(EVC_lost2, "output/EVC_arealost.gpkg")
-st_write(EVC_gained2, "output/EVC_areagained.gpkg")
-st_layers("output/EVC_arealost.gpkg") #one layer
+gained2      <- st_difference(st_read("sf_tutorial_outputs.gpkg", layer = "toy_eco_extant"),
+                              st_union(st_read("sf_tutorial_outputs.gpkg", layer = "toy_eco_pre1750")))
 
-# example 2 - write 1 file with 2 layers
-st_write(EVC_lost2, "output/EVC_areachange.gpkg", layer = "lost")
-st_write(EVC_gained2, "output/EVC_areachange.gpkg", layer = "gained")
-st_layers("output/EVC_areachange.gpkg") #two layers, one file!
+
+#Not a great plot!
+ggplot() + 
+geom_sf(data=st_crop(lost, ext(500000, 533104.694534574, 5807326.3940318, 5940129.63613299)), col = "red") +
+geom_sf(data=st_crop(gained, ext(500000, 533104.694534574, 5807326.3940318, 5940129.63613299)), col = "goldenrod")
+#problems with mapping on large scales with polygons that are close to each other.. is this representative?
+
+
+#Both methods produce an identical product.
+sum(st_area(lost))
+sum(st_area(lost2))
+
+#lets add these layers to our output geopackage
+st_write(unchanged, "sf_tutorial_outputs.gpkg", layer = "unchanged")
+st_write(lost, "sf_tutorial_outputs.gpkg", layer = "lost")
+st_write(gained, "sf_tutorial_outputs.gpkg", layer = "gained")
+
+#All contained in one file!
+st_layers("sf_tutorial_outputs.gpkg")
+
+#Take a look at what data is contained in the lost file
+head(lost)
 
 # calculate the area using st_area()
 
 # 1. as a single value
-st_area(EVC_lost2)
-st_area(EVC_gained2)
+sum(st_area(st_read("sf_tutorial_outputs.gpkg", layer = "lost")))
+sum(st_area(st_read("sf_tutorial_outputs.gpkg", layer = "gained")))
 
 #note that if your spatial object has multiple polygons, you would need to do sum(st_area(EVC_lost2)). But be careful if polygons overlap you will overestimate the area
 
 # 2. keeping the dataframe
-EVC_lost2 %>% mutate(area = x %>% st_area() %>% as.vector) # x is the geometry column, need as.vector here to remove the units
-EVC_gained2 %>% mutate(area = x %>% st_area() %>% as.vector) # x is the geometry column, need as.vector here to remove the units
+lost2 %>% mutate(area = geom %>% st_area() %>% as.vector) # need as.vector here to remove the units
+gained2 %>% mutate(area = geom %>% st_area() %>% as.vector) # need as.vector here to remove the units
 
 
 # Urbanisation - showing how the terra package and sf package interact --------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ## Population data
 # read in the raster
-pop_ras <- rast(file.path("data/population.tif"))
+pop_ras <- rast(file.path("population.tif"))
 
 
 # These sites represent locations students went to do surveys for an undergraduate class. They are a good representation for both urban and remote locations
 
 # st_buffer add a buffer around points
 # the units is based on what units your projection is in - often meters
-sites_points <- read.csv(file.path("data/sites.csv")) %>% st_as_sf(coords = c("X","Y"), crs= crs(pop_ras)) %>% rename(FID = "X.1")
+sites_points <- read.csv(file.path("sites.csv")) %>% 
+                st_as_sf(coords = c("X","Y"), crs= crs(pop_ras)) %>%
+                rename(FID = "X.1")
+
 sites <- sites_points %>% st_buffer(dist = 500, endCapStyle = "ROUND")
 
 ## Lets have a look
 sites_points # points
 sites # polygons
 
-## Michael - this doesnt plot well. Any thoughts on how to improve? I think zoom in on one section
-r.df <- crop(pop_ras, sites) %>% raster() %>% raster::rasterToPoints(spatial = TRUE) %>% data.frame()
-
+##Plotting population raster 
+pop_ras %>% as.data.frame(xy=TRUE) %>%
 ggplot() + 
-geom_raster(data=r.df, aes(x = x, y = y)) +
-geom_sf(data=(sites), colour = "orange")
+xlab("") + ylab("") +
+geom_raster(aes(x = x , y = y)) +
+geom_sf(data = (sites), colour = "orange", size = .5)
 
 for (i in 1:length(sites$FID)){
   one_site <- terra::vect(sites[i,]) # select one site. Why do you want this to be a spatVector rather than an sf object?
@@ -230,7 +232,7 @@ for (i in 1:length(sites$FID)){
 }
     
 # have a look at sites and the new column added on the right
-sites
+head(sites)
 
 ## Practice using dplyr
 sites %>%
@@ -240,20 +242,14 @@ sites %>%
   summarize(n = n(),
             mean = mean(urbanisation))
 
+# find the maximum value of urbanisation with dplyr and then plot it!
 
-# find the maximum value of urbanisation with dplyr
-## Option 1 - without dplyr
-# max(sites$urbanisation) # whats the maximum value?
-# which.max(sites$urbanisation) # which site has the maximum value?
-# sites[which.max(sites$urbanisation),] # show this site
-# site_maxurban <- vect(sites[which.max(sites$urbanisation),])
-
-site_maxurban_sf <- sites %>%
+sites %>%
   filter(urbanisation == max(urbanisation))
 
 site_maxurban <- sites %>%
-  filter(urbanisation == max(urbanisation)) %>%  ## lets filter for the highest urban
-  terra::vect(.)
+  filter(urbanisation == max(urbanisation)) %>% vect()
+
 urban_ras_maxsite <- crop(pop_ras, site_maxurban) %>%
   mask(site_maxurban) %>%  # to mask, it needs to be in the correct class. currently its sf and terra::vect() turns it into a SpatVector
   classify(cbind(NA, 0))
