@@ -30,7 +30,7 @@ st_erase = function(x, y) st_difference(x, st_union(st_combine(y)))
 
 #Creates a polygon from a DEM that covers stipulated elevation and above. Where f is the source DEM file name, x is a value below the minimum elevation of the dem, y is the elevation cut off, z is a value above top of DEM range, and t is layer name for polygon
 st_demtopoly = function(f,y,t) { rast(f) %>%
-                                     classify(matrix(c(minmax(.)[1], y, NA, y, minmax(.)[2], 1), ncol=3, byrow=TRUE)) %>%
+                                     classify(matrix(c(minmax(.)[1] -1, y, NA, y, minmax(.)[2]+1, 1), ncol=3, byrow=TRUE)) %>%
                                      as.polygons() %>%
                                      st_as_sf() %>%
                                      st_transform(st_crs(28355)) %>%
@@ -100,8 +100,10 @@ NSW_vegclass <- c("Alpine Rocky Low Open Heathland", "Sub-alpine Shrub-Grass Woo
 ####Create elevation polygons for each state
 st_demtopoly
 
+#run line 106 and 113 before talking
 #Victoria
 rast("vic_dem.tif")
+plot(rast("vic_dem.tif"))
 st_demtopoly("vic_dem.tif", 1200, "vic_1200") #create a DEM polygon for victoria at 1200m and above
 #Lets take a look at what we just created!
 plot(rast("vic_dem.tif"))
@@ -120,7 +122,6 @@ st_src_extract("EVC_extant", "X_EVCNAME", vic_vegclass) %>% st_intersection(st_r
         rbind(st_src_extract("NSW3858", "VEG_GROUP", NSW_vegclass) %>% st_intersection(st_read("sf_tutorial_dem.gpkg", layer = "nsw_1300"))) %>% #extract NSW/ACT vegetation groups, and cut to 1300m elevation and above
         st_store("toy_eco_extant") #Store extant ecosystem into geopackage
 
-
 plot(st_geometry(st_read("sf_tutorial_outputs.gpkg", layer = "toy_eco_extant")))
 plot(st_read("sf_tutorial_dem.gpkg", layer = "vic_1200"), col  = "green", add = TRUE)
 plot(st_read("sf_tutorial_dem.gpkg", layer = "nsw_1300"), add = TRUE, col  = "purple")
@@ -128,8 +129,10 @@ plot(st_geometry(st_read("sf_tutorial_outputs.gpkg", layer = "toy_eco_extant")),
 
 ####Create pre1750 distribution
 #Copy extant code and change to pre1750!
-
-
+st_layers("sf_tutorial_data.gpkg")
+st_src_extract("EVC_1750", "X_EVCNAME", vic_vegclass) %>% st_intersection(st_read("sf_tutorial_dem.gpkg", layer = "vic_1200")) %>% #extract victorian vegetation groups, and cut to 1200m elevation and above
+        rbind(st_src_extract("NSW3859", "VEG_GROUP", NSW_vegclass) %>% st_intersection(st_read("sf_tutorial_dem.gpkg", layer = "nsw_1300"))) %>% #extract NSW/ACT vegetation groups, and cut to 1300m elevation and above
+        st_store("toy_eco_pre1750") #Store extant ecosystem into geopackage
 
 view(st_read("sf_tutorial_outputs.gpkg", layer = "toy_eco_pre1750"))
 
@@ -145,7 +148,7 @@ view(st_read("sf_tutorial_outputs.gpkg", layer = "toy_eco_pre1750"))
 unchanged   <- st_intersection(st_union(st_read("sf_tutorial_outputs.gpkg", layer = "toy_eco_extant")), 
                                 st_union(st_read("sf_tutorial_outputs.gpkg", layer = "toy_eco_pre1750"))) %>% st_as_sf()
 
-#This will take some time to calculate
+#This will take some time to calculate run and switch to second section
 lost 	  	  <- st_erase(st_read("sf_tutorial_outputs.gpkg", layer = "toy_eco_pre1750"), unchanged) # remove the unchanged area from the 1750 map - gives us what was lost
 gained 		  <- st_erase(st_read("sf_tutorial_outputs.gpkg", layer = "toy_eco_extant"), unchanged) # remove the unchanged area from the current map - gives us what was gained
 
@@ -187,12 +190,15 @@ head(lost)
 sum(st_area(st_read("sf_tutorial_outputs.gpkg", layer = "lost")))
 sum(st_area(st_read("sf_tutorial_outputs.gpkg", layer = "gained")))
 
-#note that if your spatial object has multiple polygons, you would need to do sum(st_area(EVC_lost2)). But be careful if polygons overlap you will overestimate the area
-
 # 2. keeping the dataframe
 lost2 %>% mutate(area = geom %>% st_area() %>% as.vector) # need as.vector here to remove the units
 gained2 %>% mutate(area = geom %>% st_area() %>% as.vector) # need as.vector here to remove the units
 
+#Calculate loss for each vegetation group
+lost2 %>% mutate(area = geom %>% st_area() %>% as.vector) %>%
+  as.data.frame() %>%
+  group_by(veg_id) %>% 
+  summarize(area_lost_km2 = sum(area)/1000) %>% view()
 
 # Urbanisation - showing how the terra package and sf package interact --------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -244,19 +250,16 @@ sites %>%
 
 # find the maximum value of urbanisation with dplyr and then plot it!
 
-sites %>%
-  filter(urbanisation == max(urbanisation))
-
-site_maxurban <- sites %>%
+site_maxurban <- sites %>% #Create a vector of the site with the max urbanisation
   filter(urbanisation == max(urbanisation)) %>% vect()
 
-urban_ras_maxsite <- crop(pop_ras, site_maxurban) %>%
-  mask(site_maxurban) %>%  # to mask, it needs to be in the correct class. currently its sf and terra::vect() turns it into a SpatVector
+urban_ras_maxsite <- crop(pop_ras, site_maxurban) %>% #crop and mask the population raster by our max urbanisation site
+  mask(site_maxurban) %>% 
   classify(cbind(NA, 0))
 
 # Plotting ----------------------------------------------------------------
 
-## Base R - does fine, bit slow. remember to use add = TRUE
+## Base R - does fine, remember to use add = TRUE
 plot(urban_ras_maxsite) # the urban raster?
 plot(site_maxurban, add = TRUE) # the 500m buffer area
 plot(sites_points[which.max(sites$urbanisation),], add = TRUE) # the site centre point
